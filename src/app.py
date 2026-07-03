@@ -157,6 +157,11 @@ async def index():
                 form.reset();
                 showStatus('');
                 updateUploadProgress(-1, '');
+                setTimeout(() => {
+                    if (window.confirm('Upload complete. Close this window?')) {
+                        window.close();
+                    }
+                }, 200);
             }
 
             async function copyText(elementId) {
@@ -268,9 +273,9 @@ async def unlock_portal(file_id: str, pin: str = Form(default="")):
             <p class="hint">Scan this QR code on the other device. It opens the redeem page, downloads the file, and then the stored copy is removed automatically.</p>
             <img src="{qr_url}" alt="QR code">
             <div class="actions">
-                <a href="{redeem_url}">Open redeem page</a>
                 <a class="secondary" href="/portal/{file_id}">Back</a>
             </div>
+            <div class="finish-box">You can now close this page or return to the portal.</div>
         </div>
     </body>
     </html>
@@ -316,6 +321,7 @@ async def redeem_page(file_id: str):
                 <button onclick="startDownload()">Download again</button>
                 <a class="secondary" href="/portal/{file_id}">Back to portal</a>
             </div>
+            <div class="finish-box" id="finish-box">Download will finish here. Close this page after the notification appears.</div>
         </div>
         <script>
             const filename = {filename_js};
@@ -352,6 +358,15 @@ async def redeem_page(file_id: str):
                         link.remove();
                         updateDownloadProgress(100, 'Download started successfully.');
                         status.textContent = 'Download started successfully. The stored file will be removed automatically.';
+                        const finishBox = document.getElementById('finish-box');
+                        if (finishBox) {{
+                            finishBox.textContent = 'Download complete. You can close this page now.';
+                        }}
+                        setTimeout(() => {{
+                            if (window.confirm('Download complete. Close this window?')) {{
+                                window.close();
+                            }}
+                        }}, 600);
                     }} else {{
                         status.textContent = xhr.responseText || 'Download failed.';
                     }}
