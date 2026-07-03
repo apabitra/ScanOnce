@@ -273,10 +273,23 @@ async def unlock_portal(file_id: str, pin: str = Form(default="")):
             <p class="hint">Scan this QR code on the other device. It opens the redeem page, downloads the file, and then the stored copy is removed automatically.</p>
             <img src="{qr_url}" alt="QR code">
             <div class="actions">
-                <a class="secondary" href="/portal/{file_id}">Back</a>
+                <button id="qr-close" class="secondary">Close this page</button>
             </div>
-            <div class="finish-box">You can now close this page or return to the portal.</div>
+            <div class="finish-box">You can now close this page. Tap the button to close the app.</div>
         </div>
+        <script>
+            // Attempt to close the QR page when the user clicks the Close button.
+            (function() {{
+                const btn = document.getElementById('qr-close');
+                if (!btn) return;
+                btn.addEventListener('click', () => {{
+                    try {{ window.close(); }} catch (e) {{}}
+                    try {{ window.open('', '_self'); window.close(); }} catch (e) {{}}
+                    // Fallback: navigate away so user can close the tab/window manually.
+                    window.location.href = 'about:blank';
+                }});
+            }})();
+        </script>
     </body>
     </html>
     """
