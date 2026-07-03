@@ -35,7 +35,7 @@ from pathlib import Path
 
 import qrcode
 from fastapi import FastAPI, Form, UploadFile, File, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
 # ---------- Config ----------
@@ -117,28 +117,97 @@ async def index():
         <title>QR File Share</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-            body { font-family: system-ui, sans-serif; max-width: 480px; margin: 60px auto; padding: 0 20px; }
+            body { font-family: system-ui, sans-serif; max-width: 520px; margin: 60px auto; padding: 0 20px; }
             h1 { font-size: 1.4rem; }
             input[type=file] { display:block; margin: 20px 0; }
             button { background:#111; color:#fff; border:none; padding: 10px 18px; border-radius: 6px; cursor:pointer; }
             .hint { color:#666; font-size: 0.85rem; }
+            .notification { display:none; border:1px solid #d1d5db; border-radius: 14px; padding: 16px; margin-top: 18px; background:#f9fafb; box-shadow:0 10px 30px rgba(0,0,0,.04); }
+            .notification.show { display:block; }
+            .notification .label { font-size: .8rem; color:#6b7280; text-transform:uppercase; letter-spacing:.04em; margin-bottom: 6px; }
+            .notification .value { background:#fff; border-radius:10px; padding:10px 12px; margin-top:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break:break-all; }
+            .notification .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+            .notification .actions button, .notification .actions a { background:#111; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; text-decoration:none; }
+            .notification .actions .secondary { background:#fff !important; color:#111 !important; border:1px solid #d1d5db !important; }
+            #status-message { margin-top: 10px; color:#b91c1c; font-size: .9rem; }
         </style>
     </head>
     <body>
         <h1>QR File Share</h1>
         <p class="hint">Upload a file under 500KB. The QR code you get encodes a one-time secret link — scanning it is the "passcode," no separate typing needed.</p>
-        <form action="/upload" method="post" enctype="multipart/form-data">
+        <form id="upload-form" enctype="multipart/form-data">
             <input type="file" name="file" required>
-            <input type="text" name="pin" placeholder="Optional extra PIN (leave blank for none)" maxlength="12" style="width:100%; box-sizing:border-box; padding:8px; margin-bottom:12px;">
+            <input type="text" name="pin" placeholder="PIN required for every upload" maxlength="12" style="width:100%; box-sizing:border-box; padding:8px; margin-bottom:12px;">
             <button type="submit">Upload</button>
         </form>
+        <div id="status-message" role="status"></div>
+        <div id="share-notification" class="notification" role="status" aria-live="polite">
+            <div class="label">Share details</div>
+            <div class="label">Public URL</div>
+            <div class="value" id="share-url"></div>
+            <div class="label">PIN</div>
+            <div class="value" id="share-pin"></div>
+            <div class="actions">
+                <button type="button" onclick="copyText('share-url')">Copy URL</button>
+                <button type="button" onclick="copyText('share-pin')">Copy PIN</button>
+                <button type="button" class="secondary" onclick="dismissNotification()">Acknowledge</button>
+            </div>
+        </div>
         <p class="hint">Link works once — the file deletes itself right after it's downloaded, or after 1 hour if never opened.</p>
+        <script>
+            const form = document.getElementById('upload-form');
+            const notification = document.getElementById('share-notification');
+            const statusMessage = document.getElementById('status-message');
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const data = new FormData(form);
+                statusMessage.textContent = '';
+                notification.classList.remove('show');
+
+                try {
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        body: data,
+                    });
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        throw new Error(payload.detail || 'Upload failed');
+                    }
+
+                    document.getElementById('share-url').textContent = payload.portal_url;
+                    document.getElementById('share-pin').textContent = payload.pin;
+                    notification.classList.add('show');
+                } catch (error) {
+                    statusMessage.textContent = error.message || 'Upload failed';
+                }
+            });
+
+            function dismissNotification() {
+                notification.classList.remove('show');
+            }
+
+            async function copyText(elementId) {
+                const text = document.getElementById(elementId).textContent;
+                try {
+                    await navigator.clipboard.writeText(text);
+                } catch (error) {
+                    const selection = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(document.getElementById(elementId));
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    document.execCommand('copy');
+                    selection.removeAllRanges();
+                }
+            }
+        </script>
     </body>
     </html>
     """
 
 
-@app.post("/upload", response_class=HTMLResponse)
+@app.post("/upload")
 async def upload(request: Request, file: UploadFile = File(...), pin: str = Form(...)):
     _cleanup_expired()
 
@@ -169,74 +238,11 @@ async def upload(request: Request, file: UploadFile = File(...), pin: str = Form
     )
 
     portal_url = f"{_public_base_url(request)}/portal/{file_id}"
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Share details</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body {{ font-family: system-ui, sans-serif; max-width: 620px; margin: 56px auto; padding: 0 20px; }}
-            .card {{ border:1px solid #e5e7eb; border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.04); }}
-            h2 {{ margin-top: 0; }}
-            a {{ word-break: break-all; }}
-            .row {{ margin-top: 12px; }}
-            .label {{ font-size: .85rem; color:#6b7280; margin-bottom:4px; text-transform:uppercase; letter-spacing:.04em; }}
-            .value {{ font-size: 1rem; padding: 10px 12px; background:#f9fafb; border-radius:10px; display:flex; gap:12px; align-items:center; justify-content:space-between; }}
-            .hint {{ color:#6b7280; font-size: .9rem; line-height:1.5; }}
-            .actions {{ display:flex; gap:12px; flex-wrap:wrap; margin-top:18px; }}
-            .actions a, .actions button {{ background:#111; color:#fff; border:none; padding:10px 16px; border-radius:8px; cursor:pointer; text-decoration:none; }}
-            .secondary {{ background:#fff !important; color:#111 !important; border:1px solid #d1d5db !important; }}
-            .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break: break-all; }}
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h2>Upload complete</h2>
-            <p class="hint">Keep this page open or copy the details below. The receiver should open the portal link, enter the PIN, and then scan the QR to download the file.</p>
-            <div class="row">
-                <div class="label">File</div>
-                <div class="value"><span>{html.escape(file.filename)}</span></div>
-            </div>
-            <div class="row">
-                <div class="label">Download portal</div>
-                <div class="value">
-                    <span class="mono" id="portal-url">{portal_url}</span>
-                    <button type="button" class="secondary" onclick="copyText('portal-url')">Copy</button>
-                </div>
-            </div>
-            <div class="row">
-                <div class="label">PIN</div>
-                <div class="value">
-                    <span class="mono" id="portal-pin">{html.escape(pin)}</span>
-                    <button type="button" class="secondary" onclick="copyText('portal-pin')">Copy</button>
-                </div>
-            </div>
-            <div class="actions">
-                <a href="{portal_url}" target="_blank" rel="noreferrer">Open portal</a>
-                <a class="secondary" href="/">Upload another file</a>
-            </div>
-            <p class="hint">Each upload gets its own portal link, so you can handle multiple files independently.</p>
-        </div>
-        <script>
-            async function copyText(elementId) {{
-                const text = document.getElementById(elementId).textContent;
-                try {{
-                    await navigator.clipboard.writeText(text);
-                }} catch (error) {{
-                    const selection = window.getSelection();
-                    const range = document.createRange();
-                    range.selectNodeContents(document.getElementById(elementId));
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                    document.execCommand('copy');
-                    selection.removeAllRanges();
-                }}
-            }}
-        </script>
-    </body>
-    </html>
-    """
+    return JSONResponse({
+        "filename": file.filename,
+        "portal_url": portal_url,
+        "pin": pin,
+    })
 
 
 @app.get("/qr/{file_id}")
