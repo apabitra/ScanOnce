@@ -11,7 +11,7 @@ Anyone who scans it downloads the file directly — no app install needed.
 ## Run locally
 ```bash
 pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8000
+uvicorn src.app:app --host 0.0.0.0 --port 8000
 ```
 Open http://localhost:8000
 
@@ -24,7 +24,7 @@ domain, so the QR codes point to a URL the outside world can actually reach.
 1. Push this folder to a GitHub repo.
 2. On Render: New → Web Service → connect the repo.
 3. Build command: `pip install -r requirements.txt`
-4. Start command: `uvicorn app:app --host 0.0.0.0 --port $PORT`
+4. Start command: `uvicorn src.app:app --host 0.0.0.0 --port $PORT`
 5. Add environment variable `BASE_URL` = the `https://your-app.onrender.com` URL Render gives you (you can add this after the first deploy once you know the URL).
 6. Note: Render's free tier has an ephemeral filesystem — fine here since files are meant to expire in an hour anyway. Don't use this for anything you need to persist.
 
@@ -32,7 +32,7 @@ domain, so the QR codes point to a URL the outside world can actually reach.
 1. `railway init` in this folder, then `railway up`.
 2. Railway auto-detects Python; add a `Procfile` if needed:
    ```
-   web: uvicorn app:app --host 0.0.0.0 --port $PORT
+   web: uvicorn src.app:app --host 0.0.0.0 --port $PORT
    ```
 3. Set `BASE_URL` in Railway's environment variables to your generated `*.up.railway.app` domain.
 
@@ -44,7 +44,7 @@ domain, so the QR codes point to a URL the outside world can actually reach.
 ### Option D — Quick test without deploying (ngrok)
 If you just want a public link right now without deploying anywhere:
 ```bash
-uvicorn app:app --host 0.0.0.0 --port 8000 &
+uvicorn src.app:app --host 0.0.0.0 --port 8000 &
 ngrok http 8000
 ```
 Then set `BASE_URL` to the `https://xxxx.ngrok-free.app` URL ngrok gives you
