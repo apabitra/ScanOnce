@@ -360,11 +360,33 @@ async def redeem_page(file_id: str):
                         status.textContent = 'Download started successfully. The stored file will be removed automatically.';
                         const finishBox = document.getElementById('finish-box');
                         if (finishBox) {{
-                            finishBox.textContent = 'Download complete. You can close this page now.';
+                            finishBox.innerHTML = 'Download complete. <button id="close-btn">Close this tab</button>';
                         }}
+
+                        // Try to close the tab programmatically (may be blocked by some browsers).
+                        // Provide a visible fallback button which the user can tap to close.
                         setTimeout(() => {{
-                            if (window.confirm('Download complete. Close this window?')) {{
+                            try {{
                                 window.close();
+                            }} catch (e) {{
+                                // ignore
+                            }}
+                            try {{
+                                // Some browsers allow closing if we replace the current window first.
+                                window.open('', '_self');
+                                window.close();
+                            }} catch (e) {{
+                                // ignore
+                            }}
+
+                            const btn = document.getElementById('close-btn');
+                            if (btn) {{
+                                btn.addEventListener('click', () => {{
+                                    try {{ window.close(); }} catch (e) {{}}
+                                    try {{ window.open('', '_self'); window.close(); }} catch (e) {{}}
+                                    // Last-resort: navigate away so user can close tab manually.
+                                    window.location.href = 'about:blank';
+                                }});
                             }}
                         }}, 600);
                     }} else {{
