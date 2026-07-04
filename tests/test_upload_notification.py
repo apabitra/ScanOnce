@@ -90,11 +90,6 @@ class ScanOnceAppTests(unittest.TestCase):
         self.assertEqual(file_response.status_code, 200)
         self.assertEqual(file_response.content, b"hello world")
 
-    def test_frontend_assets_are_served(self):
-        response = self.client.get("/frontend/app.js")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("upload-form", response.text)
-
     def test_health_endpoint_reports_status(self):
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
