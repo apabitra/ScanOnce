@@ -1,0 +1,88 @@
+diff -ruN '--exclude=__pycache__' '--exclude=uploads' '--exclude=.pytest_cache' '--exclude=.gitignore' '--exclude=.env' repo_check/frontend/app.js repo/frontend/app.js
+--- repo_check/frontend/app.js	2026-07-04 14:59:34.000000000 +0000
++++ repo/frontend/app.js	2026-07-04 15:13:22.086912548 +0000
+@@ -44,7 +44,6 @@
+       currentShare = { url: shareUrl, pin, fileId, filename };
+ 
+       document.getElementById('share-url').textContent = shareUrl;
+-      document.getElementById('share-pin').textContent = pin;
+       const qrImg = document.getElementById('share-qr');
+       qrImg.src = fileId ? `/qr/${fileId}` : '';
+       notification.classList.add('show');
+@@ -60,23 +59,9 @@
+   xhr.send(data);
+ });
+ 
+-function togglePinVisibility() {
+-  const masked = document.getElementById('share-pin-masked');
+-  const revealed = document.getElementById('share-pin');
+-  const btn = document.getElementById('reveal-pin-btn');
+-  const isHidden = revealed.style.display === 'none';
+-  revealed.style.display = isHidden ? 'inline' : 'none';
+-  masked.style.display = isHidden ? 'none' : 'inline';
+-  btn.textContent = isHidden ? 'Hide PIN' : 'Reveal PIN';
+-}
+-
+ function dismissNotification() {
+   notification.classList.remove('show');
+   document.getElementById('share-url').textContent = '';
+-  document.getElementById('share-pin').textContent = '';
+-  document.getElementById('share-pin').style.display = 'none';
+-  document.getElementById('share-pin-masked').style.display = 'inline';
+-  document.getElementById('reveal-pin-btn').textContent = 'Reveal PIN';
+   document.getElementById('share-qr').src = '';
+   currentShare = { url: '', pin: '', fileId: '', filename: '' };
+   form.reset();
+@@ -104,7 +89,7 @@
+     await navigator.clipboard.writeText(shareText);
+     showStatus('Share details copied to clipboard (share isn\'t supported on this browser).', 'success');
+   } catch (error) {
+-    showStatus('Could not share or copy automatically. Use Copy URL / Copy PIN instead.', 'error');
++    showStatus('Could not share or download automatically. Try again, or copy the URL from above.', 'error');
+   }
+ }
+ 
+@@ -167,18 +152,3 @@
+   link.click();
+   link.remove();
+ }
+-
+-async function copyText(elementId) {
+-  const text = document.getElementById(elementId).textContent;
+-  try {
+-    await navigator.clipboard.writeText(text);
+-  } catch (error) {
+-    const selection = window.getSelection();
+-    const range = document.createRange();
+-    range.selectNodeContents(document.getElementById(elementId));
+-    selection.removeAllRanges();
+-    selection.addRange(range);
+-    document.execCommand('copy');
+-    selection.removeAllRanges();
+-  }
+-}
+diff -ruN '--exclude=__pycache__' '--exclude=uploads' '--exclude=.pytest_cache' '--exclude=.gitignore' '--exclude=.env' repo_check/frontend/index.html repo/frontend/index.html
+--- repo_check/frontend/index.html	2026-07-04 14:59:34.000000000 +0000
++++ repo/frontend/index.html	2026-07-04 15:13:01.719008835 +0000
+@@ -24,19 +24,11 @@
+         <div class="label">Share details</div>
+         <div class="label">Public URL</div>
+         <div class="value" id="share-url"></div>
+-        <div class="label">PIN</div>
+-        <div class="value" id="share-pin-masked">••••</div>
+-        <span class="value" id="share-pin" style="display:none;"></span>
+         <div class="label">QR code</div>
+         <img id="share-qr" alt="QR code linking to the download portal" width="200" height="200">
+         <div class="actions">
+-          <button type="button" onclick="copyText('share-url')">Copy URL</button>
+-          <button type="button" onclick="togglePinVisibility()" id="reveal-pin-btn">Reveal PIN</button>
+-          <button type="button" onclick="copyText('share-pin')">Copy PIN</button>
+-        </div>
+-        <div class="actions">
+           <button type="button" onclick="shareCard()" id="share-btn">Share</button>
+-          <button type="button" onclick="downloadShareCard()">Download share card</button>
++          <button type="button" onclick="downloadShareCard()">Download</button>
+           <button type="button" class="secondary" onclick="dismissNotification()">Acknowledge</button>
+         </div>
+       </div>
+       

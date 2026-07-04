@@ -44,7 +44,6 @@ form.addEventListener('submit', (event) => {
       currentShare = { url: shareUrl, pin, fileId, filename };
 
       document.getElementById('share-url').textContent = shareUrl;
-      document.getElementById('share-pin').textContent = pin;
       const qrImg = document.getElementById('share-qr');
       qrImg.src = fileId ? `/qr/${fileId}` : '';
       notification.classList.add('show');
@@ -60,23 +59,9 @@ form.addEventListener('submit', (event) => {
   xhr.send(data);
 });
 
-function togglePinVisibility() {
-  const masked = document.getElementById('share-pin-masked');
-  const revealed = document.getElementById('share-pin');
-  const btn = document.getElementById('reveal-pin-btn');
-  const isHidden = revealed.style.display === 'none';
-  revealed.style.display = isHidden ? 'inline' : 'none';
-  masked.style.display = isHidden ? 'none' : 'inline';
-  btn.textContent = isHidden ? 'Hide PIN' : 'Reveal PIN';
-}
-
 function dismissNotification() {
   notification.classList.remove('show');
   document.getElementById('share-url').textContent = '';
-  document.getElementById('share-pin').textContent = '';
-  document.getElementById('share-pin').style.display = 'none';
-  document.getElementById('share-pin-masked').style.display = 'inline';
-  document.getElementById('reveal-pin-btn').textContent = 'Reveal PIN';
   document.getElementById('share-qr').src = '';
   currentShare = { url: '', pin: '', fileId: '', filename: '' };
   form.reset();
@@ -104,7 +89,7 @@ async function shareCard() {
     await navigator.clipboard.writeText(shareText);
     showStatus('Share details copied to clipboard (share isn\'t supported on this browser).', 'success');
   } catch (error) {
-    showStatus('Could not share or copy automatically. Use Copy URL / Copy PIN instead.', 'error');
+    showStatus('Could not share or download automatically. Try again, or copy the URL from above.', 'error');
   }
 }
 
@@ -166,19 +151,4 @@ async function downloadShareCard() {
   document.body.appendChild(link);
   link.click();
   link.remove();
-}
-
-async function copyText(elementId) {
-  const text = document.getElementById(elementId).textContent;
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (error) {
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(document.getElementById(elementId));
-    selection.removeAllRanges();
-    selection.addRange(range);
-    document.execCommand('copy');
-    selection.removeAllRanges();
-  }
 }
