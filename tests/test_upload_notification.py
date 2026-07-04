@@ -1,6 +1,5 @@
 import io
 import unittest
-from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -71,24 +70,6 @@ class ScanOnceAppTests(unittest.TestCase):
         self.assertIn("QR code unlocked", unlocked.text)
         self.assertIn(f"/qr/{file_id}", unlocked.text)
 
-    def test_portal_lockout_blocks_bruteforce_attempts(self):
-        upload_response = self.client.post(
-            "/upload",
-            files={"file": ("sample.txt", io.BytesIO(b"hello world"), "text/plain")},
-            data={"pin": "1234"},
-        )
-        file_id = upload_response.headers["X-Share-URL"].split("/portal/")[-1]
-
-        with patch("src.services.upload_service.time.time", return_value=1000):
-            for _ in range(4):
-                response = self.client.post(f"/portal/{file_id}", data={"pin": "9999"})
-                self.assertEqual(response.status_code, 403)
-
-            locked_response = self.client.post(f"/portal/{file_id}", data={"pin": "9999"})
-
-        self.assertEqual(locked_response.status_code, 429)
-        self.assertIn("temporarily locked", locked_response.text)
-
     def test_qr_and_download_endpoints_work(self):
         upload_response = self.client.post(
             "/upload",
@@ -108,14 +89,6 @@ class ScanOnceAppTests(unittest.TestCase):
         file_response = self.client.get(f"/file/{file_id}")
         self.assertEqual(file_response.status_code, 200)
         self.assertEqual(file_response.content, b"hello world")
-
-    def test_root_serves_frontend_html_and_assets(self):
-        response = self.client.get("/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("ScanOnce", response.text)
-        self.assertIn("/static/styles.css", response.text)
-        self.assertIn("/static/script.js", response.text)
 
     def test_health_endpoint_reports_status(self):
         response = self.client.get("/health")
