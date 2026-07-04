@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.services.file_service import file_service
+from src.services.modules.notify import notify_service
 from src.services.modules.rate_limit import pin_rate_limiter
 
 app = FastAPI(title="QR File Share")
@@ -63,14 +64,23 @@ async def index():
 
 
 @app.post("/upload")
-async def upload(request: Request, file: UploadFile = File(...), pin: str = Form(...)):
+async def upload(request: Request, file: UploadFile = File(...), pin: str = Form(...), contact: str = Form(default="")):
     try:
         payload = file_service.create_file(file.filename or "upload", await file.read(), pin, request)
     except ValueError as exc:
         raise HTTPException(status_code=400 if "PIN" in str(exc) else 413, detail=str(exc)) from exc
 
+    message = "Upload complete."
+    contact = contact.strip()
+    if contact:
+        try:
+            notify_service.send_share_details(contact, payload["filename"], payload["portal_url"], payload["pin"])
+            message = f"Upload complete. Share details sent to {contact}."
+        except Exception as exc:
+            message = f"Upload complete, but could not notify {contact}: {exc}"
+
     return _notification_response(
-        "Upload complete.",
+        message,
         headers={
             "X-Share-URL": payload["portal_url"],
             "X-Share-PIN": payload["pin"],

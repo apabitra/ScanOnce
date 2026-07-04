@@ -109,6 +109,27 @@ class ScanOnceAppTests(unittest.TestCase):
         second_portal = self.client.get(f"/portal/{file_id}")
         self.assertEqual(second_portal.status_code, 404)
 
+    def test_upload_with_invalid_contact_still_succeeds_with_warning(self):
+        response = self.client.post(
+            "/upload",
+            files={"file": ("sample.txt", io.BytesIO(b"hello world"), "text/plain")},
+            data={"pin": "1234", "contact": "not-a-valid-contact"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("could not notify", response.headers["X-Notification-Message"])
+        self.assertIn("/portal/", response.headers["X-Share-URL"])
+
+    def test_upload_without_contact_still_works(self):
+        response = self.client.post(
+            "/upload",
+            files={"file": ("sample.txt", io.BytesIO(b"hello world"), "text/plain")},
+            data={"pin": "1234"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["X-Notification-Message"], "Upload complete.")
+
     def test_frontend_assets_are_served(self):
         response = self.client.get("/frontend/app.js")
         self.assertEqual(response.status_code, 200)
