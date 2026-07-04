@@ -1,0 +1,86 @@
+diff --git a/.github/CODEOWNERS b/.github/CODEOWNERS
+new file mode 100644
+index 0000000..7a5df7b
+--- /dev/null
++++ b/.github/CODEOWNERS
+@@ -0,0 +1,3 @@
++# Auto-request review on every PR. Update the username if this ever
++# gets shared ownership with a co-maintainer.
++* @apabitra
+diff --git a/.github/pull_request_template.md b/.github/pull_request_template.md
+new file mode 100644
+index 0000000..a61c8d9
+--- /dev/null
++++ b/.github/pull_request_template.md
+@@ -0,0 +1,28 @@
++## What does this PR do?
++
++<!-- Briefly describe the change and why it's needed -->
++
++## Related issue / discussion
++
++<!-- Link an issue, or the LinkedIn/discussion thread this came from, if any -->
++
++## Type of change
++
++- [ ] Bug fix
++- [ ] New feature
++- [ ] Security fix
++- [ ] Refactor / code health
++- [ ] Docs / config only
++
++## Checklist
++
++- [ ] I ran `python -m pytest tests/ -v` locally and all tests pass
++- [ ] I added/updated tests for the behavior I changed
++- [ ] I did not commit anything under `uploads/`, `.env`, or `__pycache__/`
++- [ ] If this touches the PIN, download, or rate-limiting logic, I manually
++      re-verified the one-time-download flow still works (upload → PIN →
++      download → confirm the link 404s on reuse)
++
++## Screenshots (if UI changed)
++
++<!-- Drag and drop images here -->
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+new file mode 100644
+index 0000000..b4b1b99
+--- /dev/null
++++ b/.github/workflows/tests.yml
+@@ -0,0 +1,28 @@
++name: Tests
++
++on:
++  push:
++    branches: [main]
++  pull_request:
++    branches: [main]
++
++jobs:
++  test:
++    runs-on: ubuntu-latest
++
++    steps:
++      - name: Check out code
++        uses: actions/checkout@v4
++
++      - name: Set up Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: "3.12"
++
++      - name: Install dependencies
++        run: |
++          python -m pip install --upgrade pip
++          pip install -r requirements-dev.txt
++
++      - name: Run tests
++        run: python -m pytest tests/ -v
+diff --git a/requirements-dev.txt b/requirements-dev.txt
+new file mode 100644
+index 0000000..b918a15
+--- /dev/null
++++ b/requirements-dev.txt
+@@ -0,0 +1,3 @@
++-r requirements.txt
++pytest==8.3.3
++httpx==0.27.2
