@@ -11,7 +11,7 @@
       <h2>__FILENAME__</h2>
       <p class="hint">Enter the PIN to download this file.</p>
       <form action="/portal/__FILE_ID__" method="post">
-        <input type="text" name="pin" placeholder="Enter PIN" autofocus required>
+        <input type="password" name="pin" placeholder="Enter PIN" autofocus required autocomplete="off">
         <button type="submit">Unlock &amp; download</button>
       </form>
     </main>

@@ -12,7 +12,7 @@
       <p class="hint">Upload a file under 500MB. You'll get a link and QR code — either one opens a PIN-protected download page.</p>
       <form id="upload-form" enctype="multipart/form-data">
         <input type="file" name="file" required>
-        <input type="text" name="pin" placeholder="PIN required for every upload" maxlength="12" class="pin-input">
+        <input type="password" name="pin" placeholder="PIN required for every upload" maxlength="12" class="pin-input" autocomplete="off">
         <button type="submit">Upload</button>
       </form>
       <div id="status-message" role="status"></div>
@@ -25,12 +25,18 @@
         <div class="label">Public URL</div>
         <div class="value" id="share-url"></div>
         <div class="label">PIN</div>
-        <div class="value" id="share-pin"></div>
+        <div class="value" id="share-pin-masked">••••</div>
+        <span class="value" id="share-pin" style="display:none;"></span>
         <div class="label">QR code</div>
         <img id="share-qr" alt="QR code linking to the download portal" width="200" height="200">
         <div class="actions">
           <button type="button" onclick="copyText('share-url')">Copy URL</button>
+          <button type="button" onclick="togglePinVisibility()" id="reveal-pin-btn">Reveal PIN</button>
           <button type="button" onclick="copyText('share-pin')">Copy PIN</button>
+        </div>
+        <div class="actions">
+          <button type="button" onclick="shareCard()" id="share-btn">Share</button>
+          <button type="button" onclick="downloadShareCard()">Download share card</button>
           <button type="button" class="secondary" onclick="dismissNotification()">Acknowledge</button>
         </div>
       </div>
