@@ -110,15 +110,6 @@ async def unlock_portal(request: Request, file_id: str, pin: str = Form(default=
         raise HTTPException(status_code=403, detail="Incorrect PIN")
 
     pin_rate_limiter.reset(file_id, client_ip)
-    return _render_frontend_template("qr_ready.html", file_id=file_id)
-
-
-@app.get("/redeem/{file_id}", response_class=HTMLResponse)
-async def redeem_page(file_id: str):
-    entry = file_service.get_entry(file_id)
-    if not entry:
-        raise HTTPException(status_code=404, detail="File not found, already downloaded, or expired")
-
     return _render_frontend_template(
         "redeem.html",
         filename=html.escape(entry.filename),

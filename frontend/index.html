@@ -9,7 +9,7 @@
   <body>
     <main class="card shell">
       <h1>QR File Share</h1>
-      <p class="hint">Upload a file under 500KB. The QR code you get encodes a one-time secret link — scanning it is the "passcode," no separate typing needed.</p>
+      <p class="hint">Upload a file under 500MB. You'll get a link and QR code — either one opens a PIN-protected download page.</p>
       <form id="upload-form" enctype="multipart/form-data">
         <input type="file" name="file" required>
         <input type="text" name="pin" placeholder="PIN required for every upload" maxlength="12" class="pin-input">
@@ -26,6 +26,8 @@
         <div class="value" id="share-url"></div>
         <div class="label">PIN</div>
         <div class="value" id="share-pin"></div>
+        <div class="label">QR code</div>
+        <img id="share-qr" alt="QR code linking to the download portal" width="200" height="200">
         <div class="actions">
           <button type="button" onclick="copyText('share-url')">Copy URL</button>
           <button type="button" onclick="copyText('share-pin')">Copy PIN</button>

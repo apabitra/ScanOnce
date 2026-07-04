@@ -13,8 +13,8 @@ class QRService:
         self.upload_service = upload_service or UploadService()
 
     def build_qr_stream(self, request: Request, file_id: str):
-        download_url = f"{self.upload_service.public_base_url(request)}/redeem/{file_id}"
-        img = qrcode.make(download_url)
+        portal_url = f"{self.upload_service.public_base_url(request)}/portal/{file_id}"
+        img = qrcode.make(portal_url)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
