@@ -1,3 +1,6 @@
 # Ignore upload directories and temp upload artifacts
 upload/
 uploads/
+
+# Ignore local environment configuration
+.env
