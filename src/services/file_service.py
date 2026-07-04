@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import Request
 
-MAX_FILE_SIZE = 500 * 1024
+MAX_FILE_SIZE = 500 * 1024 * 1024
 FILE_TTL_SECONDS = 60 * 60
 UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
