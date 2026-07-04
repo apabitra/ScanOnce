@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QR ready</title>
+    <link rel="stylesheet" href="/frontend/styles.css">
+  </head>
+  <body>
+    <main class="card">
+      <h2>QR code unlocked</h2>
+      <p class="hint">Scan this QR code on the other device. It opens the redeem page, downloads the file, and then the stored copy is removed automatically.</p>
+      <img src="/qr/__FILE_ID__" alt="QR code">
+      <div class="actions">
+        <button id="qr-close" class="secondary">Close this page</button>
+      </div>
+      <div class="finish-box">You can now close this page. Tap the button to close the app.</div>
+    </main>
+    <script>
+      (function() {
+        const btn = document.getElementById('qr-close');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          try { window.close(); } catch (e) {}
+          try { window.open('', '_self'); window.close(); } catch (e) {}
+          window.location.href = 'about:blank';
+        });
+      })();
+    </script>
+  </body>
+</html>
