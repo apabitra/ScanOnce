@@ -34,8 +34,12 @@ form.addEventListener('submit', (event) => {
   xhr.onload = () => {
     updateUploadProgress(-1, '');
     if (xhr.status >= 200 && xhr.status < 300) {
-      document.getElementById('share-url').textContent = xhr.getResponseHeader('X-Share-URL') || '';
+      const shareUrl = xhr.getResponseHeader('X-Share-URL') || '';
+      document.getElementById('share-url').textContent = shareUrl;
       document.getElementById('share-pin').textContent = xhr.getResponseHeader('X-Share-PIN') || '';
+      const fileId = shareUrl.split('/portal/')[1] || '';
+      const qrImg = document.getElementById('share-qr');
+      qrImg.src = fileId ? `/qr/${fileId}` : '';
       notification.classList.add('show');
       showStatus(xhr.getResponseHeader('X-Notification-Message') || 'Upload complete.', 'success');
     } else {
@@ -53,6 +57,7 @@ function dismissNotification() {
   notification.classList.remove('show');
   document.getElementById('share-url').textContent = '';
   document.getElementById('share-pin').textContent = '';
+  document.getElementById('share-qr').src = '';
   form.reset();
   showStatus('');
   updateUploadProgress(-1, '');

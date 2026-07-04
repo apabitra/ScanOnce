@@ -37,7 +37,7 @@ class ScanOnceAppTests(unittest.TestCase):
         self.assertEqual(response.text, "PIN is required for every file upload")
 
     def test_upload_rejects_oversized_files(self):
-        oversized = b"x" * (500 * 1024 + 1)
+        oversized = b"x" * (500 * 1024 * 1024 + 1)
         response = self.client.post(
             "/upload",
             files={"file": ("big.bin", io.BytesIO(oversized), "application/octet-stream")},
@@ -48,7 +48,7 @@ class ScanOnceAppTests(unittest.TestCase):
         self.assertEqual(response.headers["X-Notification-Type"], "error")
         self.assertIn("File too large", response.text)
 
-    def test_portal_requires_pin_and_unlocks_qr(self):
+    def test_portal_requires_pin_and_downloads_directly(self):
         upload_response = self.client.post(
             "/upload",
             files={"file": ("sample.txt", io.BytesIO(b"hello world"), "text/plain")},
@@ -67,10 +67,10 @@ class ScanOnceAppTests(unittest.TestCase):
 
         unlocked = self.client.post(f"/portal/{file_id}", data={"pin": "1234"})
         self.assertEqual(unlocked.status_code, 200)
-        self.assertIn("QR code unlocked", unlocked.text)
-        self.assertIn(f"/qr/{file_id}", unlocked.text)
+        self.assertIn("Preparing download", unlocked.text)
+        self.assertIn(f"/file/{file_id}", unlocked.text)
 
-    def test_qr_and_download_endpoints_work(self):
+    def test_qr_encodes_portal_link_and_redeem_route_is_gone(self):
         upload_response = self.client.post(
             "/upload",
             files={"file": ("sample.txt", io.BytesIO(b"hello world"), "text/plain")},
@@ -82,13 +82,32 @@ class ScanOnceAppTests(unittest.TestCase):
         self.assertEqual(qr_response.status_code, 200)
         self.assertEqual(qr_response.headers["content-type"], "image/png")
 
+        # The old unauthenticated redeem route must no longer exist —
+        # download access now requires the PIN via /portal.
         redeem_response = self.client.get(f"/redeem/{file_id}")
-        self.assertEqual(redeem_response.status_code, 200)
-        self.assertIn("Preparing download", redeem_response.text)
+        self.assertEqual(redeem_response.status_code, 404)
 
+        # Actual download still requires having gone through /portal first
+        # in the real flow; /file/{file_id} itself stays a bare stream
+        # keyed on the secret file_id, unchanged from before.
         file_response = self.client.get(f"/file/{file_id}")
         self.assertEqual(file_response.status_code, 200)
         self.assertEqual(file_response.content, b"hello world")
+
+    def test_download_is_one_time_only(self):
+        upload_response = self.client.post(
+            "/upload",
+            files={"file": ("sample.txt", io.BytesIO(b"hello world"), "text/plain")},
+            data={"pin": "1234"},
+        )
+        file_id = upload_response.headers["X-Share-URL"].split("/portal/")[-1]
+
+        self.client.post(f"/portal/{file_id}", data={"pin": "1234"})
+        first = self.client.get(f"/file/{file_id}")
+        self.assertEqual(first.status_code, 200)
+
+        second_portal = self.client.get(f"/portal/{file_id}")
+        self.assertEqual(second_portal.status_code, 404)
 
     def test_frontend_assets_are_served(self):
         response = self.client.get("/frontend/app.js")
