@@ -130,6 +130,59 @@ class ScanOnceAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["X-Notification-Message"], "Upload complete.")
 
+    def test_upload_rejects_blocked_extensions(self):
+        response = self.client.post(
+            "/upload",
+            files={"file": ("installer.exe", io.BytesIO(b"anything"), "application/octet-stream")},
+            data={"pin": "1234"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("extension", response.text)
+
+    def test_upload_rejects_renamed_executable(self):
+        pe_header = b"MZ" + b"\x00" * 62
+        response = self.client.post(
+            "/upload",
+            files={"file": ("vacation_photo.jpg", io.BytesIO(pe_header), "image/jpeg")},
+            data={"pin": "1234"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Windows executable", response.text)
+
+    def test_upload_rejects_content_extension_mismatch(self):
+        png_header = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
+        response = self.client.post(
+            "/upload",
+            files={"file": ("report.pdf", io.BytesIO(png_header), "application/pdf")},
+            data={"pin": "1234"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("PNG image", response.text)
+
+    def test_upload_accepts_matching_content_and_extension(self):
+        png_header = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
+        response = self.client.post(
+            "/upload",
+            files={"file": ("photo.png", io.BytesIO(png_header), "image/png")},
+            data={"pin": "1234"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_upload_rejects_binary_disguised_as_text(self):
+        binary_junk = bytes(range(256)) * 4
+        response = self.client.post(
+            "/upload",
+            files={"file": ("notes.txt", io.BytesIO(binary_junk), "text/plain")},
+            data={"pin": "1234"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("doesn't look like plain text", response.text)
+
     def test_frontend_assets_are_served(self):
         response = self.client.get("/frontend/app.js")
         self.assertEqual(response.status_code, 200)

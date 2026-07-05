@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from src.services.file_service import file_service
 from src.services.modules.notify import notify_service
 from src.services.modules.rate_limit import pin_rate_limiter
+from src.services.modules.upload import FileTooLarge
 
 app = FastAPI(title="QR File Share")
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -67,8 +68,10 @@ async def index():
 async def upload(request: Request, file: UploadFile = File(...), pin: str = Form(...), contact: str = Form(default="")):
     try:
         payload = file_service.create_file(file.filename or "upload", await file.read(), pin, request)
+    except FileTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400 if "PIN" in str(exc) else 413, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     message = "Upload complete."
     contact = contact.strip()
