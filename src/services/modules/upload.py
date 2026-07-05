@@ -10,6 +10,12 @@ from typing import Optional
 from fastapi import Request
 
 from src.services.file_service import FileEntry, FILES, MAX_FILE_SIZE, UPLOAD_DIR
+from src.services.modules.content_scan import assert_file_is_safe
+
+
+class FileTooLarge(ValueError):
+    """Raised specifically for the size-limit case, so the route can
+    return 413 instead of the 400 used for every other rejection reason."""
 
 
 class UploadService:
@@ -53,11 +59,13 @@ class UploadService:
     def create_file(self, filename: str, contents: bytes, pin: str, request: Request) -> dict:
         self.cleanup_expired()
         if len(contents) > MAX_FILE_SIZE:
-            raise ValueError(f"File too large ({len(contents)} bytes). Limit is {MAX_FILE_SIZE} bytes.")
+            raise FileTooLarge(f"File too large ({len(contents)} bytes). Limit is {MAX_FILE_SIZE} bytes.")
 
         pin = pin.strip()
         if not pin:
             raise ValueError("PIN is required for every file upload")
+
+        assert_file_is_safe(filename, contents)
 
         pin_hash = self.hash_pin(pin)
         file_id = secrets.token_urlsafe(24)

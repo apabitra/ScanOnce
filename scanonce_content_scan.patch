@@ -1,0 +1,274 @@
+diff --git a/src/app.py b/src/app.py
+index 5af20dc..ecca5e3 100644
+--- a/src/app.py
++++ b/src/app.py
+@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
+ from src.services.file_service import file_service
+ from src.services.modules.notify import notify_service
+ from src.services.modules.rate_limit import pin_rate_limiter
++from src.services.modules.upload import FileTooLarge
+ 
+ app = FastAPI(title="QR File Share")
+ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+@@ -67,8 +68,10 @@ async def index():
+ async def upload(request: Request, file: UploadFile = File(...), pin: str = Form(...), contact: str = Form(default="")):
+     try:
+         payload = file_service.create_file(file.filename or "upload", await file.read(), pin, request)
++    except FileTooLarge as exc:
++        raise HTTPException(status_code=413, detail=str(exc)) from exc
+     except ValueError as exc:
+-        raise HTTPException(status_code=400 if "PIN" in str(exc) else 413, detail=str(exc)) from exc
++        raise HTTPException(status_code=400, detail=str(exc)) from exc
+ 
+     message = "Upload complete."
+     contact = contact.strip()
+diff --git a/src/services/modules/content_scan.py b/src/services/modules/content_scan.py
+new file mode 100644
+index 0000000..31fc076
+--- /dev/null
++++ b/src/services/modules/content_scan.py
+@@ -0,0 +1,146 @@
++"""
++Structural file-safety checks:
++  1. Extension blocklist for auto-executing file types.
++  2. Magic-byte signature detection for known executable formats,
++     checked regardless of the claimed extension.
++  3. Content-vs-extension validation: detects the file's *real* type from
++     its content and rejects it if that doesn't match what the filename
++     claims (e.g. a .exe renamed to report.pdf, or a script saved as
++     photo.jpg). This is what makes extension checks meaningful — an
++     extension blocklist alone is trivially bypassed by renaming.
++
++This is NOT a substitute for real antivirus/malware scanning. It can't
++detect an actual virus signature embedded inside an otherwise legitimate
++file type (e.g. a malicious macro inside a real .docx, or an exploit
++payload inside a well-formed .pdf). That requires signature-based
++scanning (ClamAV) or a hosted API (VirusTotal/Cloudmersive) — a separate,
++larger addition.
++"""
++
++from pathlib import Path
++
++BLOCKED_EXTENSIONS = {
++    ".exe", ".dll", ".com", ".scr", ".msi", ".msp", ".msc",
++    ".bat", ".cmd", ".ps1", ".psm1", ".vbs", ".vbe", ".wsf", ".wsh",
++    ".js", ".jse", ".jar",
++    ".sh", ".bash", ".run",
++    ".apk", ".app", ".dmg", ".pkg",
++    ".scpt", ".workflow",
++}
++
++_EXECUTABLE_SIGNATURES = [
++    (b"MZ", "Windows executable (PE/EXE/DLL)"),
++    (b"\x7fELF", "Linux/Unix executable (ELF)"),
++    (b"\xca\xfe\xba\xbe", "macOS universal binary (Mach-O)"),
++    (b"\xfe\xed\xfa\xce", "macOS executable (Mach-O 32-bit)"),
++    (b"\xfe\xed\xfa\xcf", "macOS executable (Mach-O 64-bit)"),
++    (b"\xcf\xfa\xed\xfe", "macOS executable (Mach-O, reversed)"),
++    (b"#!/", "Script with a shebang line"),
++]
++
++# (offset, magic bytes, detected type label, extensions this signature is
++# legitimately allowed to appear under). If the file's content matches a
++# signature here but the claimed extension isn't in that set, it's rejected
++# as a mismatch — regardless of whether the real type itself is "safe."
++_KNOWN_SIGNATURES = [
++    (0, b"\x89PNG\r\n\x1a\n", "PNG image", {".png"}),
++    (0, b"\xff\xd8\xff", "JPEG image", {".jpg", ".jpeg"}),
++    (0, b"GIF87a", "GIF image", {".gif"}),
++    (0, b"GIF89a", "GIF image", {".gif"}),
++    (0, b"BM", "BMP image", {".bmp"}),
++    (0, b"%PDF", "PDF document", {".pdf"}),
++    (0, b"\x1a\x45\xdf\xa3", "Matroska/WebM video", {".mkv", ".webm"}),
++    (0, b"\x1f\x8b", "GZIP archive", {".gz", ".tgz"}),
++    (0, b"7z\xbc\xaf\x27\x1c", "7-Zip archive", {".7z"}),
++    (0, b"Rar!\x1a\x07", "RAR archive", {".rar"}),
++    (0, b"ID3", "MP3 audio", {".mp3"}),
++    (0, b"\xff\xfb", "MP3 audio", {".mp3"}),
++    (0, b"RIFF", "RIFF container (WAV/AVI)", {".wav", ".avi"}),
++    # ZIP-based formats share one signature — Office docs, plain zips, and
++    # a few other container formats are all "PK\x03\x04" under the hood.
++    (0, b"PK\x03\x04", "ZIP-based file (zip/docx/xlsx/pptx)",
++     {".zip", ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp"}),
++    # MP4/MOV/M4A: signature bytes sit at offset 4, not 0.
++    (4, b"ftyp", "MP4/MOV/M4A media", {".mp4", ".mov", ".m4a", ".m4v"}),
++]
++
++# Extensions with no reliable magic-byte signature (plain text formats).
++# These get a lighter check: content should look like actual text, not
++# binary data pretending to be text.
++_TEXT_EXTENSIONS = {".txt", ".csv", ".md", ".log", ".json", ".xml", ".yaml", ".yml", ".html", ".htm", ".css"}
++
++
++def _has_blocked_extension(filename: str) -> str | None:
++    suffix = Path(filename).suffix.lower()
++    return suffix if suffix in BLOCKED_EXTENSIONS else None
++
++
++def _detect_executable_signature(contents: bytes) -> str | None:
++    header = contents[:8]
++    for signature, label in _EXECUTABLE_SIGNATURES:
++        if header[:len(signature)] == signature:
++            return label
++    return None
++
++
++def _detect_known_type(contents: bytes):
++    """Returns (label, allowed_extensions) if the content matches a known
++    signature, else None if the type can't be determined from content."""
++    for offset, signature, label, allowed_exts in _KNOWN_SIGNATURES:
++        window = contents[offset:offset + len(signature)]
++        if window == signature:
++            return label, allowed_exts
++    return None
++
++
++def _looks_like_text(contents: bytes) -> bool:
++    sample = contents[:4096]
++    if b"\x00" in sample:
++        return False
++    try:
++        sample.decode("utf-8")
++        return True
++    except UnicodeDecodeError:
++        return False
++
++
++def assert_file_is_safe(filename: str, contents: bytes) -> None:
++    """Raises ValueError with a user-facing reason if the file is rejected."""
++    suffix = Path(filename).suffix.lower()
++
++    blocked_ext = _has_blocked_extension(filename)
++    if blocked_ext:
++        raise ValueError(
++            f"Files with the '{blocked_ext}' extension aren't allowed "
++            f"(executable/script file types are blocked for safety)."
++        )
++
++    exec_signature = _detect_executable_signature(contents)
++    if exec_signature:
++        raise ValueError(
++            f"This file was rejected: its content matches a "
++            f"{exec_signature}, regardless of its filename/extension."
++        )
++
++    known = _detect_known_type(contents)
++    if known:
++        label, allowed_exts = known
++        if suffix not in allowed_exts:
++            raise ValueError(
++                f"This file's content looks like a {label}, but its "
++                f"filename claims '{suffix or '(no extension)'}'. "
++                f"Rename it to match its real type, or re-export it correctly."
++            )
++        return
++
++    # No binary signature matched. If it claims to be a text-like format,
++    # make sure it actually looks like text rather than opaque binary data.
++    if suffix in _TEXT_EXTENSIONS and not _looks_like_text(contents):
++        raise ValueError(
++            f"This file's content doesn't look like plain text, but its "
++            f"filename claims '{suffix}'. Rejected as a possible mismatch."
++        )
++
++    # Unrecognized content with no signature and no text-extension claim:
++    # nothing to compare the extension against, so let it through — this
++    # only validates the formats above, it doesn't block everything else.
+diff --git a/src/services/modules/upload.py b/src/services/modules/upload.py
+index 716defb..b9044ef 100644
+--- a/src/services/modules/upload.py
++++ b/src/services/modules/upload.py
+@@ -10,6 +10,12 @@ from typing import Optional
+ from fastapi import Request
+ 
+ from src.services.file_service import FileEntry, FILES, MAX_FILE_SIZE, UPLOAD_DIR
++from src.services.modules.content_scan import assert_file_is_safe
++
++
++class FileTooLarge(ValueError):
++    """Raised specifically for the size-limit case, so the route can
++    return 413 instead of the 400 used for every other rejection reason."""
+ 
+ 
+ class UploadService:
+@@ -53,12 +59,14 @@ class UploadService:
+     def create_file(self, filename: str, contents: bytes, pin: str, request: Request) -> dict:
+         self.cleanup_expired()
+         if len(contents) > MAX_FILE_SIZE:
+-            raise ValueError(f"File too large ({len(contents)} bytes). Limit is {MAX_FILE_SIZE} bytes.")
++            raise FileTooLarge(f"File too large ({len(contents)} bytes). Limit is {MAX_FILE_SIZE} bytes.")
+ 
+         pin = pin.strip()
+         if not pin:
+             raise ValueError("PIN is required for every file upload")
+ 
++        assert_file_is_safe(filename, contents)
++
+         pin_hash = self.hash_pin(pin)
+         file_id = secrets.token_urlsafe(24)
+         dest = self.upload_dir / uuid.uuid4().hex
+diff --git a/tests/test_upload_notification.py b/tests/test_upload_notification.py
+index 6a401b2..cf2e506 100644
+--- a/tests/test_upload_notification.py
++++ b/tests/test_upload_notification.py
+@@ -130,6 +130,59 @@ class ScanOnceAppTests(unittest.TestCase):
+         self.assertEqual(response.status_code, 200)
+         self.assertEqual(response.headers["X-Notification-Message"], "Upload complete.")
+ 
++    def test_upload_rejects_blocked_extensions(self):
++        response = self.client.post(
++            "/upload",
++            files={"file": ("installer.exe", io.BytesIO(b"anything"), "application/octet-stream")},
++            data={"pin": "1234"},
++        )
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn("extension", response.text)
++
++    def test_upload_rejects_renamed_executable(self):
++        pe_header = b"MZ" + b"\x00" * 62
++        response = self.client.post(
++            "/upload",
++            files={"file": ("vacation_photo.jpg", io.BytesIO(pe_header), "image/jpeg")},
++            data={"pin": "1234"},
++        )
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn("Windows executable", response.text)
++
++    def test_upload_rejects_content_extension_mismatch(self):
++        png_header = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
++        response = self.client.post(
++            "/upload",
++            files={"file": ("report.pdf", io.BytesIO(png_header), "application/pdf")},
++            data={"pin": "1234"},
++        )
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn("PNG image", response.text)
++
++    def test_upload_accepts_matching_content_and_extension(self):
++        png_header = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
++        response = self.client.post(
++            "/upload",
++            files={"file": ("photo.png", io.BytesIO(png_header), "image/png")},
++            data={"pin": "1234"},
++        )
++
++        self.assertEqual(response.status_code, 200)
++
++    def test_upload_rejects_binary_disguised_as_text(self):
++        binary_junk = bytes(range(256)) * 4
++        response = self.client.post(
++            "/upload",
++            files={"file": ("notes.txt", io.BytesIO(binary_junk), "text/plain")},
++            data={"pin": "1234"},
++        )
++
++        self.assertEqual(response.status_code, 400)
++        self.assertIn("doesn't look like plain text", response.text)
++
+     def test_frontend_assets_are_served(self):
+         response = self.client.get("/frontend/app.js")
+         self.assertEqual(response.status_code, 200)
+         
